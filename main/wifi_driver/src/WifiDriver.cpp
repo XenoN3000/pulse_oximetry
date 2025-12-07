@@ -4,11 +4,16 @@
 
 #include "WifiDriver.hpp"
 
+#include <logger.hpp>
+#include <MQTTSubscriber.hpp>
+
 #include "wifi_provisioning/manager.h"
 #include "wifi_provisioning/scheme_ble.h"
 
 namespace wifidriver {
+
     using wfd = WifiDriver;
+    using namespace logger;
 
     wfd::WifiDriver(const char *ssid, const char *password, uint8_t maxRetry, const char *tag) :
         TAG(tag), ssid(ssid), password(password), maxRetry(maxRetry), retryNum(0), wifiEventGroup(nullptr) {}
@@ -57,30 +62,6 @@ namespace wifidriver {
             &static_wifi_event_handler,
             this,
             &instance_got_ip));
-
-        // wifi_config_t wifi_cfg = {};
-        // wifi_cfg.sta = {};
-        // wifi_cfg.sta.threshold = {};
-
-
-        // wifi_config_t wifi_config = {
-        //         .sta = {
-        //
-        //             /* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (password len => 8).
-        //              * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
-        //              * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
-        //              * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
-        //              */
-        //             .threshold = {
-        //                 .authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD
-        //             },
-        //             .sae_pwe_h2e = ESP_WIFI_SAE_MODE,
-        //             // .sae_h2e_identifier = WIFI_H2E_IDENTIFIER,
-        //         },
-        //     };
-        //
-        // memset(wifi_config.sta.ssid, '\000', 32);
-        // memset(wifi_config.sta.password, '\000', 64);
 
         wifi_config_t wifi_config = {};
         strncpy(reinterpret_cast<char*>(wifi_config.sta.ssid), ssid, sizeof(wifi_config.sta.ssid) - 1);
@@ -169,8 +150,46 @@ namespace wifidriver {
                 .scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM
             };
 
+        ESP_ERROR_CHECK(wifi_prov_mgr_init(prov_config));
+
+
+        bool provisioned = false;
+        ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
+
+
+        ESP_ERROR_CHECK(wifi_prov_mgr_endpoint_create("mqtt_config"));
+        ESP_ERROR_CHECK(
+            wifi_prov_mgr_endpoint_register("mqtt_config", mqtt_subscriber::MQTTSubscriber::static_mqtt_config_handler,
+                nullptr));
+
+
+        if (!provisioned) {
+            Logger::Instance.info(TAG, STARTING_BLE, PROV_DEVICE_NAME);
+            wifi_prov_security_t security = WIFI_PROV_SECURITY_1;
+
+            const char *pop = PROV_PROOF_OF_POSSESSION;
+            ESP_ERROR_CHECK(wifi_prov_mgr_start_provisioning(security,pop,PROV_DEVICE_NAME, nullptr));
+
+        }
+        else {
+            Logger::Instance.info(TAG, ALREADY_PROVISIONED);
+            wifi_prov_mgr_deinit(); // Release resources
+            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+            ESP_ERROR_CHECK(esp_wifi_start());
+        }
+
+        Logger::Instance.info(TAG, "wifi_init_sta finished.");
+        Logger::Instance.info(TAG, "waiting for wifi...");
+
+
+        EventBits_t bits = xEventGroupWaitBits(wifiEventGroup,
+                                               WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                                               pdFALSE,
+                                               pdFALSE,
+                                               portMAX_DELAY);
 
         return ESP_OK;
+
     }
 
 
@@ -195,6 +214,43 @@ namespace wifidriver {
             retryNum = 0;
             xEventGroupSetBits(wifiEventGroup, WIFI_CONNECTED_BIT);
         }
+        else if (event_base == WIFI_PROV_EVENT) {
+            switch (event_id) {
+            case WIFI_PROV_START:
+                Logger::Instance.info(TAG, "Provisioning started");
+                break;
+            case WIFI_PROV_CRED_RECV:
+                {
+                    wifi_sta_config_t *wifi_sta_cfg = (wifi_sta_config_t*)event_data;
+                    Logger::Instance.info(TAG,
+                                          "Received Wi-Fi credentials"
+                                          "\n\tSSID     : %s"
+                                          "\n\tPassword : %s",
+                                          (const char*)wifi_sta_cfg->ssid,
+                                          (const char*)wifi_sta_cfg->password);
+                    break;
+                }
+            case WIFI_PROV_CRED_FAIL:
+                {
+                    wifi_prov_sta_fail_reason_t *reason = (wifi_prov_sta_fail_reason_t*)event_data;
+                    Logger::Instance.error(TAG,
+                                           "Provisioning failed: %s",
+                                           (*reason == WIFI_PROV_STA_AUTH_ERROR)
+                                               ? "Wi-Fi Auth Error"
+                                               : "Wi-Fi AP Not Found");
+                    break;
+                }
+            case WIFI_PROV_CRED_SUCCESS:
+                Logger::Instance.info(TAG, "Provisioning successful");
+                break;
+            case WIFI_PROV_END:
+                wifi_prov_mgr_deinit();
+                break;
+            default:
+                break;
+            }
+        }
+
     }
 
 

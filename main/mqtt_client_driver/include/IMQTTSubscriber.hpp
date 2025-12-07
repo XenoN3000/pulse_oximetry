@@ -5,6 +5,7 @@
 #ifndef ESP32P4_MASTER_IMQTTSUBSCRIBER_HPP
 #define ESP32P4_MASTER_IMQTTSUBSCRIBER_HPP
 #include <atomic>
+#include <string>
 
 
 #ifdef  __cplusplus
@@ -28,12 +29,13 @@ extern "C" {
 
 
 namespace mqtt_subscriber {
+    using namespace std;
 
     class IMQTTSubscriber {
 
     public:
-        IMQTTSubscriber(const char *brokerUri, int port, const char *username = nullptr,
-                        const char *password = nullptr);
+        IMQTTSubscriber(string brokerUri, int port, string username = "",
+                        string password = "");
         virtual ~IMQTTSubscriber() = default;
 
         void start();
@@ -63,11 +65,13 @@ namespace mqtt_subscriber {
         const char *TAG = "MQTT-ABSTRACT";
         static void mqttEventHandler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
 
+        void load_mqtt_settings();
 
-        const char *brokerUri;
-        int port;
-        const char *username;
-        const char *password;
+
+        string brokerUri;
+        uint32_t port;
+        string username;
+        string password;
 
     };
 }

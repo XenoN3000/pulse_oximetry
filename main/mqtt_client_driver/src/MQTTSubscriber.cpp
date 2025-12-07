@@ -3,16 +3,23 @@
 //
 
 #include "MQTTSubscriber.hpp"
+
+#include <logger.hpp>
+#include <utility>
+
 #include "IMQTTSubscriber.hpp"
 #include "../../../../../../../../usr/local/Cellar/esp/esp-idf/components/tcp_transport/private_include/esp_transport_internal.h"
 
 namespace mqtt_subscriber {
     using imqt = IMQTTSubscriber;
+    using mqt = MQTTSubscriber;
 
+    using namespace logger;
+    using namespace std;
 
-    imqt::IMQTTSubscriber(const char *brokerUri, int port, const char *username, const char *password) :
+    imqt::IMQTTSubscriber(string brokerUri, int port, string  username, string password) :
         client(nullptr),
-        brokerUri(brokerUri), port(port), username(username), password(password) {
+        brokerUri(std::move(brokerUri)), port(port), username(std::move(username)), password(std::move(password)) {
 
         this->start();
     }
@@ -91,12 +98,17 @@ namespace mqtt_subscriber {
 
     void imqt::start() {
 
+        load_mqtt_settings();
 
-        mqttConfig.broker.address.uri = brokerUri;
+        if (!brokerUri.empty() ||  port == 0) {
+            Logger::Instance.error("Host And Port Not Set ! \n Host: %s - Port %d", brokerUri.c_str(), port);
+        }
+
+        mqttConfig.broker.address.uri = brokerUri.c_str();
         mqttConfig.broker.address.port = port;
         mqttConfig.network.disable_auto_reconnect = false;
-        mqttConfig.credentials.username = username;
-        mqttConfig.credentials.authentication.password = password;
+        mqttConfig.credentials.username = username.c_str();
+        mqttConfig.credentials.authentication.password = password.c_str();
 
 
         ESP_LOGI(TAG, "--- DUMPING MQTT CONFIG ---");
@@ -151,5 +163,99 @@ namespace mqtt_subscriber {
 
     void imqt::onDefaultEvent(esp_mqtt_event_handle_t event) { ESP_LOGI(TAG, "Other event id:%d", event->event_id); }
 
+    esp_err_t mqt::mqtt_config_handler(uint32_t session_id, const uint8_t *inbuf, ssize_t inlen, uint8_t **outbuf,
+                                       ssize_t *outlen, void *priv_data) {
+
+        if (inbuf) {
+            char payload[128];
+            if (inlen >= sizeof(payload)) inlen = sizeof(payload) - 1;
+            memcpy(payload, inbuf, inlen);
+            payload[inlen] = '\0';
+
+            Logger::Instance.info(TAG, "Received MQTT Config: %s", payload);
+
+            nvs_handle_t my_handle;
+            esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+            if (err == ESP_OK) {
+                // Check if there is a delimiter (comma or semicolon)
+                char *delim = strchr(payload, ',');
+                if (!delim) delim = strchr(payload, ';');
+
+                if (delim) {
+                    // Format: HOST,PORT
+                    *delim = '\0'; // Split string
+                    char *host_str = payload;
+                    char *port_str = delim + 1;
+                    uint32_t port = atoi(port_str);
+
+                    nvs_set_str(my_handle, "mqtt_host", host_str);
+                    nvs_set_u32(my_handle, "mqtt_port", port);
+
+                    nvs_erase_key(my_handle, "mqtt_uri");
+
+                    Logger::Instance.info(TAG, "Saved Host: %s, Port: %lu", host_str, port);
+                }
+                else {
+                    nvs_set_str(my_handle, "mqtt_uri", payload);
+
+                    nvs_erase_key(my_handle, "mqtt_host");
+                    nvs_erase_key(my_handle, "mqtt_port");
+
+                    Logger::Instance.info(TAG, "Saved URI: %s", payload);
+                }
+                nvs_commit(my_handle);
+                nvs_close(my_handle);
+            }
+        }
+
+        char response[] = "OK";
+        *outbuf = (uint8_t*)strdup(response);
+        if (*outbuf == nullptr) return ESP_ERR_NO_MEM;
+        *outlen = strlen(response) + 1;
+
+        return ESP_OK;
+    }
+
+    void imqt::load_mqtt_settings() {
+        nvs_handle_t my_handle;
+        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+
+        // Reset Globals
+        brokerUri = "";
+        port = 0;
+
+        if (err == ESP_OK) {
+            // Try Loading Host + Port first
+            size_t req_size;
+            esp_err_t host_err = nvs_get_str(my_handle, "mqtt_host", nullptr, &req_size);
+            char *current_mqtt_host = (char *)malloc(req_size > 0 ? req_size : 1); // Allocate at least 1 byte
+
+            char current_mqtt_uri[256]; // A reasonable buffer size for URI
+
+            uint32_t current_mqtt_port;
+            if (host_err == ESP_OK && req_size > 0 ) {
+                nvs_get_str(my_handle, "mqtt_host", current_mqtt_host, &req_size);
+                nvs_get_u32(my_handle, "mqtt_port", &current_mqtt_port);
+                Logger::Instance.info(TAG, "Loaded Host: %s, Port: %lu", current_mqtt_host, current_mqtt_port);
+                brokerUri = current_mqtt_host;
+                port = current_mqtt_port;
+            }
+            // Fallback to URI
+            else if (nvs_get_str(my_handle, "mqtt_uri", nullptr, &req_size) == ESP_OK) {
+                if (req_size < sizeof(current_mqtt_uri)) {
+                    nvs_get_str(my_handle, "mqtt_uri", current_mqtt_uri, &req_size);
+                    Logger::Instance.info(TAG, "Loaded URI: %s", current_mqtt_uri);
+                    brokerUri = current_mqtt_uri;
+                    // Port will be parsed from URI by esp_mqtt_client_init
+                }
+            } else {
+                Logger::Instance.warning(TAG, "No MQTT configuration found in NVS.");
+            }
+            if (current_mqtt_host) {
+                free(current_mqtt_host);
+            }
+            nvs_close(my_handle);
+        }
+    }
 
 } // mqtt_subscriber

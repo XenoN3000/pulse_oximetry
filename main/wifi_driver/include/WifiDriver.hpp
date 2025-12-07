@@ -58,6 +58,11 @@
 namespace wifidriver {
 
 
+    constexpr char STARTING_BLE[] = "Starting BLE Provisioning. Name: %s";
+    constexpr char PROV_DEVICE_NAME[] = "PROV_MAX30102";
+    constexpr char PROV_PROOF_OF_POSSESSION[] = "esp32pop";
+    constexpr char ALREADY_PROVISIONED[] = "Already provisioned, starting Wi-Fi...";
+
     enum WIFI_STATUS {
         WIFI_CONNECTED_BIT = BIT0,
         WIFI_FAIL_BIT      = BIT1
@@ -66,18 +71,16 @@ namespace wifidriver {
 
     class WifiDriver {
     public:
-
         esp_err_t init();
 
         esp_err_t init_with_provisioning();
 
-        static WifiDriver CreateWiFiDriver(const char *ssid, const char *password, uint8_t maxRetry = 5,
+        static WifiDriver CreateWiFiDriver(const char *ssid = nullptr, const char *password = nullptr, uint8_t maxRetry = 5,
                                            const char *tag = "WIFI-manager");
-        static WifiDriver* New_CreateWiFiDriver(const char *ssid, const char *password, uint8_t maxRetry = 5,
+        static WifiDriver* New_CreateWiFiDriver(const char *ssid = nullptr, const char *password = nullptr, uint8_t maxRetry = 5,
                                                 const char *tag = "WIFI-manager");
 
         void wifiEventHandler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
-
     private:
         const char *TAG;
         const char *ssid;

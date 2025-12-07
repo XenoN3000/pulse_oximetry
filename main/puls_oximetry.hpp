@@ -6,6 +6,7 @@
 #define PULS_OXIMETRY_PULS_OXIMETRY_HPP
 
 #pragma once
+#include <string>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "MAX30102.hpp"
@@ -15,7 +16,6 @@
 #include "message.h"
 #include "WifiDriver.hpp"
 #include "logger.hpp"
-
 
 
 #endif //PULS_OXIMETRY_PULS_OXIMETRY_HPP

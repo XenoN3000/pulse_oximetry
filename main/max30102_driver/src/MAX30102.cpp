@@ -33,25 +33,21 @@ namespace max30102 {
         ESP_ERROR_CHECK(i2c_master_transmit(devHandle, buffer, sizeof(buffer), -1));
     }
 
-    uint32_t MAX30102::readIR() {
-
+    PulseData MAX30102::readValues() {
         uint8_t reg_addr = REG_FIFO_DATA;
-        uint8_t data[6]; // MAX30102 sends 3 bytes Red, 3 bytes IR
+        uint8_t data[6]; // 3 bytes Red, 3 bytes IR
 
-        // New API: Transmit (write register addr) + Receive (read data) in one go
-        // This handles the "Restart" condition automatically
+        PulseData result = {0, 0};
+
         esp_err_t ret = i2c_master_transmit_receive(devHandle, &reg_addr, 1, data, 6, -1);
+        if (ret != ESP_OK) return result;
 
-        if (ret != ESP_OK) {
-            Logger::Instance.error(tag, I2C_READ_FAILED);
-            return 0;
-        }
+        // Bytes 0-2: Red Channel
+        result.red = ((data[0] & 0x03) << 16) | (data[1] << 8) | data[2];
 
-        // Data format:
-        // Byte 0-2: Red Channel
-        // Byte 3-5: IR Channel
-        // We are interested in IR for heartbeat detection
-        uint32_t ir = ((data[3] & 0x03) << 16) | (data[4] << 8) | data[5];
-        return ir;
+        // Bytes 3-5: IR Channel
+        result.ir = ((data[3] & 0x03) << 16) | (data[4] << 8) | data[5];
+
+        return result;
     }
 }
