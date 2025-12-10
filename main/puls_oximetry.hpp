@@ -15,7 +15,6 @@
 #include "ITask.hpp"
 #include "message.h"
 #include "WifiDriver.hpp"
-#include "logger.hpp"
 
 
 #endif //PULS_OXIMETRY_PULS_OXIMETRY_HPP

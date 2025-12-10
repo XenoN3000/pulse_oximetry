@@ -21,25 +21,30 @@ extern "C" [[noreturn]] void app_main(void) {
     auto mqtt = mqtt_subscriber::MQTTSubscriber::New_MQTTSubscriber();
 
     wifi->init_with_provisioning();
+
     mqtt->start();
 
-
-    std::string payload = "";
-    // max30102::PulseData pulseData{};
+    std::string payloadIr, payloadRed = "";
+    max30102::PulseData pulseData{};
     while (true) {
         auto sensorData = sensor.readValues();
 
-        mqtt->connect();
 
         if (sensorData.ir > 10000) {
 
             // sprintf(payload, "red : %lu, ir : %lu", sensorData.red, sensorData.ir);
-            payload = "red : " + to_string(sensorData.red);
-            payload += " ir : " + to_string(sensorData.ir);
+            payloadRed = to_string(sensorData.red);
+            payloadIr = to_string(sensorData.ir);
 
 
-            mqtt->publish("telemetry/sensor/raw", payload.c_str(), static_cast<int>(payload.length()), 0, 0);
+            mqtt->connect();
+            mqtt->publish("telemetry/sensor/raw/red", payloadRed.c_str(), static_cast<int>(payloadRed.length()), 0, 0);
+            mqtt->publish("telemetry/sensor/raw/ir", payloadIr.c_str(), static_cast<int>(payloadIr.length()), 0, 0);
+            mqtt->disconnect();
+
         }
+
+
         vTaskDelay(pdMS_TO_TICKS(20));
 
     }

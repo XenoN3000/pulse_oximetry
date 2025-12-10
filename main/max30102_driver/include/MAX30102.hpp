@@ -6,7 +6,6 @@
 #define PULS_OXIMETRY_MAX30102_HPP
 
 
-#include <logger.hpp>
 #include <driver/i2c_master.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -14,7 +13,6 @@
 
 namespace max30102 {
 
-    using namespace logger;
 
 
     constexpr i2c_master_bus_config_t i2cMasterDefaultConfig() {

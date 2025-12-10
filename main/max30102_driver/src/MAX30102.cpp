@@ -4,17 +4,19 @@
 
 #include "MAX30102.hpp"
 
+#include <esp_log.h>
+
 namespace max30102 {
 
     void MAX30102::init(i2c_master_bus_config_t *i2cMasterConfig, i2c_device_config_t *i2cDeviceConfig) {
         ESP_ERROR_CHECK(i2c_new_master_bus(i2cMasterConfig, &busHandle ));
         ESP_ERROR_CHECK(i2c_master_bus_add_device(busHandle, i2cDeviceConfig, &devHandle));
 
-        Logger::Instance.info(tag, RESETTING_SENSOR);
+        ESP_LOGI(tag, "%s", RESETTING_SENSOR);
         writeRegister(REG_MODE_CONFIG, 0x40);
         vTaskDelay(pdMS_TO_TICKS(100));
 
-        Logger::Instance.info(tag, CONFIG_SENSOR);
+        ESP_LOGI(tag, "%s", CONFIG_SENSOR);
 
         writeRegister(REG_INTR_ENABLE_1, 0xC0); // Enable interrupts (optional usage)
         writeRegister(REG_INTR_ENABLE_2, 0x00);
@@ -40,7 +42,10 @@ namespace max30102 {
         PulseData result = {0, 0};
 
         esp_err_t ret = i2c_master_transmit_receive(devHandle, &reg_addr, 1, data, 6, -1);
-        if (ret != ESP_OK) return result;
+        if (ret != ESP_OK) {
+            ESP_LOGE(tag, "I2C transmit failed ( %s )", esp_err_to_name(ret));
+            return result;
+        }
 
         // Bytes 0-2: Red Channel
         result.red = ((data[0] & 0x03) << 16) | (data[1] << 8) | data[2];

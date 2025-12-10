@@ -4,16 +4,10 @@
 
 #include "WifiDriver.hpp"
 
-#include <logger.hpp>
-#include <MQTTSubscriber.hpp>
-
-#include "wifi_provisioning/manager.h"
-#include "wifi_provisioning/scheme_ble.h"
 
 namespace wifidriver {
 
     using wfd = WifiDriver;
-    using namespace logger;
 
     wfd::WifiDriver(const char *ssid, const char *password, uint8_t maxRetry, const char *tag) :
         TAG(tag), ssid(ssid), password(password), maxRetry(maxRetry), retryNum(0), wifiEventGroup(nullptr) {}
@@ -152,19 +146,14 @@ namespace wifidriver {
 
         ESP_ERROR_CHECK(wifi_prov_mgr_init(prov_config));
 
-
         bool provisioned = false;
         ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
 
 
-        ESP_ERROR_CHECK(wifi_prov_mgr_endpoint_create("mqtt_config"));
-        ESP_ERROR_CHECK(
-            wifi_prov_mgr_endpoint_register("mqtt_config", mqtt_subscriber::MQTTSubscriber::static_mqtt_config_handler,
-                nullptr));
-
-
         if (!provisioned) {
-            Logger::Instance.info(TAG, STARTING_BLE, PROV_DEVICE_NAME);
+
+
+            ESP_LOGI(TAG, STARTING_BLE, PROV_DEVICE_NAME);
             wifi_prov_security_t security = WIFI_PROV_SECURITY_1;
 
             const char *pop = PROV_PROOF_OF_POSSESSION;
@@ -172,14 +161,14 @@ namespace wifidriver {
 
         }
         else {
-            Logger::Instance.info(TAG, ALREADY_PROVISIONED);
+            ESP_LOGI(TAG, "%s", ALREADY_PROVISIONED);
             wifi_prov_mgr_deinit(); // Release resources
             ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
             ESP_ERROR_CHECK(esp_wifi_start());
         }
 
-        Logger::Instance.info(TAG, "wifi_init_sta finished.");
-        Logger::Instance.info(TAG, "waiting for wifi...");
+        ESP_LOGI(TAG, "wifi_init_sta finished.");
+        ESP_LOGI(TAG, "waiting for wifi...");
 
 
         EventBits_t bits = xEventGroupWaitBits(wifiEventGroup,
@@ -217,31 +206,31 @@ namespace wifidriver {
         else if (event_base == WIFI_PROV_EVENT) {
             switch (event_id) {
             case WIFI_PROV_START:
-                Logger::Instance.info(TAG, "Provisioning started");
+                ESP_LOGI(TAG, "Provisioning started");
                 break;
             case WIFI_PROV_CRED_RECV:
                 {
                     wifi_sta_config_t *wifi_sta_cfg = (wifi_sta_config_t*)event_data;
-                    Logger::Instance.info(TAG,
-                                          "Received Wi-Fi credentials"
-                                          "\n\tSSID     : %s"
-                                          "\n\tPassword : %s",
-                                          (const char*)wifi_sta_cfg->ssid,
-                                          (const char*)wifi_sta_cfg->password);
+                    ESP_LOGI(TAG,
+                             "Received Wi-Fi credentials"
+                             "\n\tSSID     : %s"
+                             "\n\tPassword : %s",
+                             (const char*)wifi_sta_cfg->ssid,
+                             (const char*)wifi_sta_cfg->password);
                     break;
                 }
             case WIFI_PROV_CRED_FAIL:
                 {
                     wifi_prov_sta_fail_reason_t *reason = (wifi_prov_sta_fail_reason_t*)event_data;
-                    Logger::Instance.error(TAG,
-                                           "Provisioning failed: %s",
-                                           (*reason == WIFI_PROV_STA_AUTH_ERROR)
-                                               ? "Wi-Fi Auth Error"
-                                               : "Wi-Fi AP Not Found");
+                    ESP_LOGE(TAG,
+                             "Provisioning failed: %s",
+                             (*reason == WIFI_PROV_STA_AUTH_ERROR)
+                             ? "Wi-Fi Auth Error"
+                             : "Wi-Fi AP Not Found");
                     break;
                 }
             case WIFI_PROV_CRED_SUCCESS:
-                Logger::Instance.info(TAG, "Provisioning successful");
+                ESP_LOGI(TAG, "Provisioning successful");
                 break;
             case WIFI_PROV_END:
                 wifi_prov_mgr_deinit();

@@ -15,6 +15,12 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
+#include <MQTTSubscriber.hpp>
+
+#include "wifi_provisioning/manager.h"
+#include "wifi_provisioning/scheme_ble.h"
+
+
 #include "lwip/err.h"
 #include "lwip/sys.h"
 // Preprocessor logic from the C example to set up WPA3/SAE modes based on Kconfig
@@ -58,8 +64,11 @@
 namespace wifidriver {
 
 
-    constexpr char STARTING_BLE[] = "Starting BLE Provisioning. Name: %s";
+    // constexpr const char STARTING_BLE[] = "Starting BLE Provisioning. Name: %s";
+#define STARTING_BLE "Starting BLE Provisioning. Name: %s"
     constexpr char PROV_DEVICE_NAME[] = "PROV_MAX30102";
+    constexpr char PROV_MQTT_NAME[] = "MQTT_OPTIONS!";
+
     constexpr char PROV_PROOF_OF_POSSESSION[] = "esp32pop";
     constexpr char ALREADY_PROVISIONED[] = "Already provisioned, starting Wi-Fi...";
 
@@ -75,9 +84,11 @@ namespace wifidriver {
 
         esp_err_t init_with_provisioning();
 
-        static WifiDriver CreateWiFiDriver(const char *ssid = nullptr, const char *password = nullptr, uint8_t maxRetry = 5,
+        static WifiDriver CreateWiFiDriver(const char *ssid = nullptr, const char *password = nullptr,
+                                           uint8_t maxRetry = 5,
                                            const char *tag = "WIFI-manager");
-        static WifiDriver* New_CreateWiFiDriver(const char *ssid = nullptr, const char *password = nullptr, uint8_t maxRetry = 5,
+        static WifiDriver* New_CreateWiFiDriver(const char *ssid = nullptr, const char *password = nullptr,
+                                                uint8_t maxRetry = 5,
                                                 const char *tag = "WIFI-manager");
 
         void wifiEventHandler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
